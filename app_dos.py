@@ -156,7 +156,7 @@ if uploaded_file:
 
     # ---------------- BOTON DE EXPORTACION ----------------
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
         resultados['df'].to_excel(writer, sheet_name='Datos Originales', index=False)
         resultados['imbalance_df'].to_excel(writer, sheet_name='Ranking Desbalance')
         resultados['resistance_df'].to_excel(writer, sheet_name='Ranking Resistencia')
