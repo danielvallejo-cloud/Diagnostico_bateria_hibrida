@@ -1,37 +1,35 @@
 # ============================================================
 # SISTEMA DE DIAGNOSTICO DINAMICO DE BATERIA HIBRIDA
-# INTERFAZ WEB CON STREAMLIT
+# INTERFAZ WEB STREAMLIT - VERSION MEJORADA
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
+from io import BytesIO
 
 # ============================================================
 # -------------------- MODULO ANALITICO ----------------------
 # ============================================================
 
 def analizar_bateria(file):
-    # Leer Excel
     df = pd.read_excel(file)
-
-    # Columnas de módulos
+    
     module_columns = df.columns[1:21]
     modules = df[module_columns]
 
-    # Columna de corriente
     current_column = [col for col in df.columns if "corriente" in col.lower()][0]
     current = df[current_column]
-
     time = np.arange(len(df))
 
     # Métricas dinámicas
     V_mean = modules.mean(axis=1)
+    V_std = modules.std(axis=1)
     V_max = modules.max(axis=1)
     V_min = modules.min(axis=1)
     delta_V = V_max - V_min
-
     max_delta_V = delta_V.max()
     mean_delta_V = delta_V.mean()
 
@@ -90,7 +88,6 @@ def analizar_bateria(file):
 # ============================================================
 
 st.set_page_config(page_title="Diagnóstico Batería Híbrida", layout="wide")
-
 st.title("💡 Sistema de Diagnóstico Dinámico - Batería Híbrida")
 st.markdown("**Autor:** Daniel Vallejo")
 
@@ -101,47 +98,68 @@ if uploaded_file:
     resultados = analizar_bateria(uploaded_file)
 
     # --- PESTAÑAS ---
-    tab1, tab2, tab3, tab4 = st.tabs(["Diagnóstico Final", "Gráficas", "Ranking Desbalance", "Ranking Resistencia"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Diagnóstico Final", "Gráficas Interactivas", "Ranking Desbalance", "Ranking Resistencia"])
 
     # ---------------- TAB 1: Diagnóstico Final ----------------
     with tab1:
         st.subheader("Informe Técnico de Resultados")
         st.text_area("Detalle de diagnóstico", resultados['diagnostico'], height=200)
-        st.markdown(f"**Pico de desbalance:** {resultados['imbalance_df'].index[0]}")
-        st.markdown(f"**Pico de resistencia:** {resultados['resistance_df'].index[0]}")
-        st.markdown(f"**Max ΔV:** {resultados['max_delta_V']:.3f} V")
-        st.markdown(f"**Mean ΔV:** {resultados['mean_delta_V']:.3f} V")
+        
+        # Panel de métricas con colores
+        col1, col2, col3 = st.columns(3)
+        col1.metric("ΔV Máximo", f"{resultados['max_delta_V']:.3f} V", delta=f"{resultados['mean_delta_V']:.3f} V")
+        col2.metric("Módulo Pico Desbalance", resultados['imbalance_df'].index[0])
+        col3.metric("Módulo Pico Resistencia", resultados['resistance_df'].index[0])
 
-    # ---------------- TAB 2: Gráficas ----------------
+    # ---------------- TAB 2: Gráficas Interactivas ----------------
     with tab2:
-        fig, ax = plt.subplots(2,2, figsize=(12,7))
+        st.subheader("Visualización Interactiva")
+        
+        # Filtros
+        modulos_seleccionados = st.multiselect(
+            "Selecciona módulos a graficar",
+            resultados["modules"].columns,
+            default=resultados["modules"].columns[:5]
+        )
 
         # Voltajes módulos
-        for col in resultados["modules"].columns:
-            ax[0,0].plot(resultados["time"], resultados["modules"][col], alpha=0.3)
-        ax[0,0].set_title("Voltajes Módulos")
+        fig1 = go.Figure()
+        for col in modulos_seleccionados:
+            fig1.add_trace(go.Scatter(
+                x=resultados["time"], y=resultados["modules"][col],
+                mode='lines', name=col, opacity=0.6
+            ))
+        fig1.update_layout(title="Voltajes de Módulos", xaxis_title="Tiempo", yaxis_title="Voltaje (V)")
+        st.plotly_chart(fig1, use_container_width=True)
 
         # Delta V
-        ax[0,1].plot(resultados["time"], resultados["delta_V"])
-        ax[0,1].set_title("Delta V")
+        fig2 = px.line(x=resultados["time"], y=resultados["delta_V"], labels={'x':'Tiempo', 'y':'Delta V'}, title="Delta V a lo largo del tiempo")
+        st.plotly_chart(fig2, use_container_width=True)
 
-        # Corriente
-        ax[1,0].plot(resultados["time"], resultados["current"])
-        ax[1,0].set_title("Corriente")
-
-        # Delta V vs Corriente
-        ax[1,1].scatter(resultados["current"], resultados["delta_V"], alpha=0.4)
-        ax[1,1].set_title("Delta V vs Corriente")
-
-        fig.tight_layout()
-        st.pyplot(fig)
+        # Corriente vs Delta V
+        fig3 = px.scatter(x=resultados["current"], y=resultados["delta_V"], labels={'x':'Corriente', 'y':'Delta V'}, title="Delta V vs Corriente")
+        st.plotly_chart(fig3, use_container_width=True)
 
     # ---------------- TAB 3: Ranking Desbalance ----------------
     with tab3:
         st.subheader("Ranking de Desbalance por Módulo")
-        st.dataframe(resultados['imbalance_df'])
+        st.dataframe(resultados['imbalance_df'].style.background_gradient(cmap='Reds'))
 
     # ---------------- TAB 4: Ranking Resistencia ----------------
     with tab4:
         st.subheader("Ranking de Resistencia Dinámica por Módulo")
-        st.dataframe(resultados['resistance_df'])
+        st.dataframe(resultados['resistance_df'].style.background_gradient(cmap='Reds'))
+
+    # ---------------- BOTON DE EXPORTACION ----------------
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        resultados['df'].to_excel(writer, sheet_name='Datos Originales', index=False)
+        resultados['imbalance_df'].to_excel(writer, sheet_name='Ranking Desbalance')
+        resultados['resistance_df'].to_excel(writer, sheet_name='Ranking Resistencia')
+    output.seek(0)
+    st.download_button(
+        label="📥 Descargar resultados en Excel",
+        data=output,
+        file_name="diagnostico_bateria.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
