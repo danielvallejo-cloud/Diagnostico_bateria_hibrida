@@ -6,19 +6,21 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib
+import matplotlib.pyplot as plt
 
 # ============================================================
 # -------------------- MODULO ANALITICO ----------------------
 # ============================================================
 
-def analizar_bateria(file_path):
+def analizar_bateria(file):
+    # Leer Excel
+    df = pd.read_excel(file)
 
-    df = pd.read_excel(file_path)
-
+    # Columnas de módulos
     module_columns = df.columns[1:21]
     modules = df[module_columns]
 
+    # Columna de corriente
     current_column = [col for col in df.columns if "corriente" in col.lower()][0]
     current = df[current_column]
 
@@ -26,7 +28,6 @@ def analizar_bateria(file_path):
 
     # Métricas dinámicas
     V_mean = modules.mean(axis=1)
-    V_std = modules.std(axis=1)
     V_max = modules.max(axis=1)
     V_min = modules.min(axis=1)
     delta_V = V_max - V_min
