@@ -1,13 +1,12 @@
 # ============================================================
 # SISTEMA DE DIAGNOSTICO DINAMICO DE BATERIA HIBRIDA
-# INTERFAZ WEB STREAMLIT - VERSION MEJORADA
+# INTERFAZ STREAMLIT - VERSION MEJORADA SIN DEPENDENCIAS EXTERNAS
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 from io import BytesIO
 
 # ============================================================
@@ -98,7 +97,7 @@ if uploaded_file:
     resultados = analizar_bateria(uploaded_file)
 
     # --- PESTAÑAS ---
-    tab1, tab2, tab3, tab4 = st.tabs(["Diagnóstico Final", "Gráficas Interactivas", "Ranking Desbalance", "Ranking Resistencia"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Diagnóstico Final", "Gráficas", "Ranking Desbalance", "Ranking Resistencia"])
 
     # ---------------- TAB 1: Diagnóstico Final ----------------
     with tab1:
@@ -111,34 +110,39 @@ if uploaded_file:
         col2.metric("Módulo Pico Desbalance", resultados['imbalance_df'].index[0])
         col3.metric("Módulo Pico Resistencia", resultados['resistance_df'].index[0])
 
-    # ---------------- TAB 2: Gráficas Interactivas ----------------
+    # ---------------- TAB 2: Gráficas ----------------
     with tab2:
-        st.subheader("Visualización Interactiva")
+        st.subheader("Visualización de Gráficas")
         
-        # Filtros
+        # Filtro por módulos
         modulos_seleccionados = st.multiselect(
             "Selecciona módulos a graficar",
             resultados["modules"].columns,
             default=resultados["modules"].columns[:5]
         )
 
-        # Voltajes módulos
-        fig1 = go.Figure()
-        for col in modulos_seleccionados:
-            fig1.add_trace(go.Scatter(
-                x=resultados["time"], y=resultados["modules"][col],
-                mode='lines', name=col, opacity=0.6
-            ))
-        fig1.update_layout(title="Voltajes de Módulos", xaxis_title="Tiempo", yaxis_title="Voltaje (V)")
-        st.plotly_chart(fig1, use_container_width=True)
+        if modulos_seleccionados:
+            fig, ax = plt.subplots(2, 2, figsize=(12, 7))
 
-        # Delta V
-        fig2 = px.line(x=resultados["time"], y=resultados["delta_V"], labels={'x':'Tiempo', 'y':'Delta V'}, title="Delta V a lo largo del tiempo")
-        st.plotly_chart(fig2, use_container_width=True)
+            # Voltajes módulos
+            for col in modulos_seleccionados:
+                ax[0,0].plot(resultados["time"], resultados["modules"][col], alpha=0.3)
+            ax[0,0].set_title("Voltajes Módulos")
 
-        # Corriente vs Delta V
-        fig3 = px.scatter(x=resultados["current"], y=resultados["delta_V"], labels={'x':'Corriente', 'y':'Delta V'}, title="Delta V vs Corriente")
-        st.plotly_chart(fig3, use_container_width=True)
+            # Delta V
+            ax[0,1].plot(resultados["time"], resultados["delta_V"], color='orange')
+            ax[0,1].set_title("Delta V")
+
+            # Corriente
+            ax[1,0].plot(resultados["time"], resultados["current"], color='green')
+            ax[1,0].set_title("Corriente")
+
+            # Delta V vs Corriente
+            ax[1,1].scatter(resultados["current"], resultados["delta_V"], alpha=0.4, color='red')
+            ax[1,1].set_title("Delta V vs Corriente")
+
+            fig.tight_layout()
+            st.pyplot(fig)
 
     # ---------------- TAB 3: Ranking Desbalance ----------------
     with tab3:
